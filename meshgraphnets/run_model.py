@@ -25,11 +25,12 @@ from meshgraphnets import cfd_eval
 from meshgraphnets import cfd_model
 from meshgraphnets import cloth_eval
 from meshgraphnets import cloth_model
+from meshgraphnets import ray_eval
 from meshgraphnets import ray_model
 from meshgraphnets import core_model
 from meshgraphnets import dataset
 
-from memory_profiler import profile
+# from memory_profiler import profile
 
 FLAGS = flags.FLAGS
 flags.DEFINE_enum('mode', 'train', ['train', 'eval'],
@@ -51,10 +52,10 @@ PARAMETERS = {
     'cloth': dict(noise=0.003, gamma=0.1, field='world_pos', history=True,
                   size=3, batch=1, model=cloth_model, evaluator=cloth_eval),
     'ray': dict(noise=0.003, gamma=0.1, field='world_pos', history=True, # TODO: this needs specific tuning
-                  size=1, batch=1, model=ray_model, evaluator=cloth_eval),  
+                  size=1, batch=1, model=ray_model, evaluator=ray_eval),  
 }
 
-@profile
+# @profile
 def learner(model, params):
   """Run a learner job."""
   if FLAGS.model == 'ray':
@@ -78,7 +79,7 @@ def learner(model, params):
   optimizer = tf.train.AdamOptimizer(learning_rate=lr)
   train_op = optimizer.minimize(loss_op, global_step=global_step)
   # Don't train for the first few steps, just accumulate normalization stats
-  train_op = tf.cond(tf.less(global_step, 1000),
+  train_op = tf.cond(tf.less(global_step, 100),
                      lambda: tf.group(tf.assign_add(global_step, 1)),
                      lambda: tf.group(train_op))
 
@@ -98,29 +99,33 @@ def learner(model, params):
 
 def evaluator(model, params):
   """Run a model rollout trajectory."""
-  ds = dataset.load_dataset(FLAGS.dataset_dir, FLAGS.rollout_split)
-  ds = dataset.add_targets(ds, [params['field']], add_history=params['history'])
+  if FLAGS.model == 'ray':
+    ds = dataset.load_ray_dataset(FLAGS.dataset_dir, 'train')
+  else:
+    ds = dataset.load_dataset(FLAGS.dataset_dir, FLAGS.rollout_split)
+    ds = dataset.add_targets(ds, [params['field']], add_history=params['history'])
   inputs = tf.data.make_one_shot_iterator(ds).get_next()
-  scalar_op, traj_ops = params['evaluator'].evaluate(model, inputs)
+  scalar_op = params['evaluator'].evaluate(model, inputs)
   tf.train.create_global_step()
 
   with tf.train.MonitoredTrainingSession(
       checkpoint_dir=FLAGS.checkpoint_dir,
       save_checkpoint_secs=None,
       save_checkpoint_steps=None) as sess:
-    trajectories = []
+    # trajectories = []
     scalars = []
-    for traj_idx in range(FLAGS.num_rollouts):
-      logging.info('Rollout trajectory %d', traj_idx)
-      scalar_data, traj_data = sess.run([scalar_op, traj_ops])
-      trajectories.append(traj_data)
-      scalars.append(scalar_data)
-    for key in scalars[0]:
-      logging.info('%s: %g', key, np.mean([x[key] for x in scalars]))
-    with open(FLAGS.rollout_path, 'wb') as fp:
-      pickle.dump(trajectories, fp)
+    # for traj_idx in range(FLAGS.num_rollouts):
+    #   logging.info('Rollout trajectory %d', traj_idx)
+    scalar_data = sess.run([scalar_op])
+    scalars.append(scalar_data)
+    for l in scalars:
+      print(l)    
+    # for key in scalars[0]:
+    #   logging.info('%s: %g', key, np.mean([x[key] for x in scalars]))
+    # with open(FLAGS.rollout_path, 'wb') as fp:
+    #   pickle.dump(trajectories, fp)
 
-@profile
+# @profile
 def main(argv):
   del argv
   tf.enable_resource_variables()
