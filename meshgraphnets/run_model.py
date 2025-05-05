@@ -50,7 +50,7 @@ PARAMETERS = {
     'cloth': dict(noise=0.003, gamma=0.1, field='world_pos', history=True,
                   size=3, batch=1, model=cloth_model, evaluator=cloth_eval),
     'ray': dict(noise=0.003, gamma=0.1, field='world_pos', history=True, # TODO: this needs specific tuning
-                  size=3, batch=1, model=ray_model, evaluator=cloth_eval),  
+                  size=1, batch=1, model=ray_model, evaluator=cloth_eval),  
 }
 
 
@@ -88,7 +88,7 @@ def learner(model, params):
 
     while not sess.should_stop():
       _, step, loss = sess.run([train_op, global_step, loss_op])
-      if step % 1000 == 0:
+      if step % 1 == 0:
         logging.info('Step %d: Loss %g', step, loss)
     logging.info('Training complete.')
 
@@ -121,8 +121,8 @@ def evaluator(model, params):
 def main(argv):
   del argv
   tf.enable_resource_variables()
-  # tf.disable_eager_execution()
-  tf.enable_eager_execution()
+  tf.disable_eager_execution()
+  # tf.enable_eager_execution()
 
   params = PARAMETERS[FLAGS.model]
   learned_model = core_model.EncodeProcessDecode(

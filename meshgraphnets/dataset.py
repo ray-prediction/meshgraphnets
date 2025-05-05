@@ -63,6 +63,7 @@ feature_description = {
 }
 
 def _parse_ray(example_proto):
+    print('called _parse')
     parsed = tf.io.parse_single_example(example_proto, feature_description)
 
     # Reshape based on metadata
@@ -96,8 +97,8 @@ def _parse_ray(example_proto):
 
 def load_ray_dataset(path, split):
   ds = tf.data.TFRecordDataset(os.path.join(path, split+'.tfrecord'))
-  ds = ds.map(functools.partial(_parse_ray), num_parallel_calls=8)
-  ds = ds.prefetch(1)
+  ds = ds.map(functools.partial(_parse_ray), num_parallel_calls=1)
+  # ds = ds.prefetch(1)
   return ds
 
 def load_dataset(path, split):

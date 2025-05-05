@@ -22,6 +22,9 @@ from meshgraphnets import common
 from meshgraphnets import core_model
 from meshgraphnets import normalization
 
+from absl import logging
+
+
 max_feat = 12
 
 class Model(snt.AbstractModule):
@@ -31,6 +34,7 @@ class Model(snt.AbstractModule):
     super(Model, self).__init__(name=name)
     # TODO: 
     with self._enter_variable_scope():
+      self.random = 0
       self._learned_model = learned_model
       self._output_normalizer = normalization.Normalizer(
           size=1, name='output_normalizer') # TODO: size 1?
@@ -45,8 +49,8 @@ class Model(snt.AbstractModule):
 
     # take a single tx location (randomly sampled) and embed a single feature 100 or something idk
     tx_pos = inputs['tx_loc']
-    random = tf.random.uniform(shape=[], minval=0, maxval=tf.shape(tx_pos)[0], dtype=tf.int32)
-    tx_pos = tf.gather(tx_pos, random) # shape (,3)
+    self.random = tf.random.uniform(shape=[], minval=0, maxval=tf.shape(tx_pos)[0], dtype=tf.int32)
+    tx_pos = tf.gather(tx_pos, self.random) # shape (,3)
 
     rx_pos = inputs['rx_loc'] # shape (num_rx, 3)
     # rx locations should be all, embed a 0?
@@ -83,8 +87,10 @@ class Model(snt.AbstractModule):
     node_features = tf.concat([primitive_embed, tx_embed, rx_embed], axis=0)
     print('node_feat_shape',node_features.shape)
 
+
+    # make edges next
     graph_adj = inputs['scene_adj']
-    tx_adj = inputs['tx_adj'][random] # only 1 tx for now
+    tx_adj = inputs['tx_adj'][self.random] # only 1 tx for now
     rx_adj = inputs['rx_adj']
 
     # print(graph_adj)
@@ -99,12 +105,12 @@ class Model(snt.AbstractModule):
     prim_pos = tf.reshape(prim_averages, [-1, 3])
     # print(prim_pos.shape)
     points = tf.concat([prim_pos, tx_pos, rx_pos], axis=0)
-    print(points.shape)
+    # print(points.shape)
 
     relative_pos = (tf.gather(points, senders) - tf.gather(points, receivers))
 
     edge_features = tf.concat([relative_pos, tf.norm(relative_pos, axis=-1, keepdims=True)], axis=-1)
-    print(edge_features.shape)
+    # print(edge_features.shape)
 
     mesh_edges = core_model.EdgeSet(
         name='mesh_edges',
@@ -117,6 +123,7 @@ class Model(snt.AbstractModule):
         edge_sets=[mesh_edges])
 
   def _build(self, inputs):
+    print('called _build')
     graph = self._build_graph(inputs, is_training=False)
     per_node_network_output = self._learned_model(graph)
     return self._update(inputs, per_node_network_output)
@@ -127,21 +134,35 @@ class Model(snt.AbstractModule):
     graph = self._build_graph(inputs, is_training=True)
     network_output = self._learned_model(graph)
 
-    # build target acceleration
-    cur_position = inputs['world_pos']
-    prev_position = inputs['prev|world_pos']
-    target_position = inputs['target|world_pos']
-    target_acceleration = target_position - 2*cur_position + prev_position
-    target_normalized = self._output_normalizer(target_acceleration)
+    # build target total power received
+    real_coeff = inputs['real_channel_coeff'][:, self.random]
+    imag_coeff = inputs['imag_channel_coeff'][:, self.random]
+    # print(imag_coeff.shape)
 
-    # build loss
-    loss_mask = tf.equal(inputs['node_type'][:, 0], common.NodeType.NORMAL)
-    error = tf.reduce_sum((target_normalized - network_output)**2, axis=1)
-    loss = tf.reduce_mean(error[loss_mask])
+    target_inco_sum_power = tf.math.reduce_sum(real_coeff ** 2 + imag_coeff ** 2, axis=1)
+    # print(incoherent_sum_power)
+
+    # print(tf.math.count_nonzero(incoherent_sum_power))
+    num_prim = tf.shape(inputs['prim_vertices'])[0]
+    num_tx = 1
+    num_rx = tf.shape(inputs['rx_loc'])[0]
+    total = num_prim + num_tx + num_rx
+
+    loss_mask = tf.range(total)
+    # print(num_prim)
+    loss_mask = loss_mask >= (total - num_rx)
+    # print(loss_mask[0:56])
+
+    # print(target_inco_sum_power.shape)
+    # print(network_output[loss_mask].shape)
+    error = tf.reduce_sum((target_inco_sum_power - network_output[loss_mask])**2, axis=1)
+    # print(error.shape)
+    loss = tf.reduce_mean(error)
     return loss
 
   def _update(self, inputs, per_node_network_output):
     """Integrate model outputs."""
+    print('called _update')
     acceleration = self._output_normalizer.inverse(per_node_network_output)
     # integrate forward
     cur_position = inputs['world_pos']
