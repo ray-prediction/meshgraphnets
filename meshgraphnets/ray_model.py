@@ -22,6 +22,7 @@ from meshgraphnets import common
 from meshgraphnets import core_model
 from meshgraphnets import normalization
 
+max_feat = 12
 
 class Model(snt.AbstractModule):
   """Model for static cloth simulation."""
@@ -32,11 +33,11 @@ class Model(snt.AbstractModule):
     with self._enter_variable_scope():
       self._learned_model = learned_model
       self._output_normalizer = normalization.Normalizer(
-          size=3, name='output_normalizer') # TODO: size 1?
+          size=1, name='output_normalizer') # TODO: size 1?
       self._node_normalizer = normalization.Normalizer(
-          size=3+common.NodeType.SIZE, name='node_normalizer')
+          size=max_feat+common.RayNodeType.SIZE, name='node_normalizer')
       self._edge_normalizer = normalization.Normalizer(
-          size=7, name='edge_normalizer')  # 2D coord + 3D coord + 2*length = 7 # TODO: 3D 
+          size=4, name='edge_normalizer')  # 2D coord + 3D coord + 2*length = 7 # TODO: 3D 
       
   def _build_graph(self, inputs, is_training):
     """Builds input graph."""
@@ -57,7 +58,6 @@ class Model(snt.AbstractModule):
     prim_normals = tf.expand_dims(inputs['prim_normals'], axis=-1)
 
     # graph nodes should be 3d vertices - their average wit normal info included normal
-    max_feat = 12
     primitive_features = tf.concat([prim_vertices, prim_normals], -1)
     primitive_features = tf.reshape(primitive_features, [-1, max_feat])
     tx_features = tf.ones([1, 1])
@@ -81,7 +81,7 @@ class Model(snt.AbstractModule):
 
     # shape (?, 15) with rows of prims, tx, then rx
     node_features = tf.concat([primitive_embed, tx_embed, rx_embed], axis=0)
-    # print(node_features.shape)
+    print('node_feat_shape',node_features.shape)
 
     graph_adj = inputs['scene_adj']
     tx_adj = inputs['tx_adj'][random] # only 1 tx for now
