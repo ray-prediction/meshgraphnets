@@ -23,6 +23,8 @@ import tensorflow.compat.v1 as tf
 
 from meshgraphnets.common import NodeType
 
+from absl import logging
+
 
 def _parse(proto, meta):
   """Parses a trajectory from tf.Example."""
@@ -63,7 +65,8 @@ feature_description = {
 }
 
 def _parse_ray(example_proto):
-    print('called _parse')
+    # print('called _parse')
+    logging.info('called _parse')
     parsed = tf.io.parse_single_example(example_proto, feature_description)
 
     # Reshape based on metadata

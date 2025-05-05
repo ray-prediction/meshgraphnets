@@ -29,6 +29,7 @@ from meshgraphnets import ray_model
 from meshgraphnets import core_model
 from meshgraphnets import dataset
 
+from memory_profiler import profile
 
 FLAGS = flags.FLAGS
 flags.DEFINE_enum('mode', 'train', ['train', 'eval'],
@@ -53,7 +54,7 @@ PARAMETERS = {
                   size=1, batch=1, model=ray_model, evaluator=cloth_eval),  
 }
 
-
+@profile
 def learner(model, params):
   """Run a learner job."""
   if FLAGS.model == 'ray':
@@ -88,6 +89,8 @@ def learner(model, params):
 
     while not sess.should_stop():
       _, step, loss = sess.run([train_op, global_step, loss_op])
+      # if step == 2:
+      #   return
       if step % 1 == 0:
         logging.info('Step %d: Loss %g', step, loss)
     logging.info('Training complete.')
@@ -117,7 +120,7 @@ def evaluator(model, params):
     with open(FLAGS.rollout_path, 'wb') as fp:
       pickle.dump(trajectories, fp)
 
-
+@profile
 def main(argv):
   del argv
   tf.enable_resource_variables()

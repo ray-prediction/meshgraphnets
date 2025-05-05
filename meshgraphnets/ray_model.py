@@ -160,12 +160,13 @@ class Model(snt.AbstractModule):
     loss = tf.reduce_mean(error)
     return loss
 
-  def _update(self, inputs, per_node_network_output):
-    """Integrate model outputs."""
-    print('called _update')
-    acceleration = self._output_normalizer.inverse(per_node_network_output)
-    # integrate forward
-    cur_position = inputs['world_pos']
-    prev_position = inputs['prev|world_pos']
-    position = 2*cur_position + acceleration - prev_position
-    return position
+  # def _update(self, inputs, per_node_network_output):
+  #   """Integrate model outputs."""
+  #   return -1
+  #   print('called _update')
+  #   acceleration = self._output_normalizer.inverse(per_node_network_output)
+  #   # integrate forward
+  #   cur_position = inputs['world_pos']
+  #   prev_position = inputs['prev|world_pos']
+  #   position = 2*cur_position + acceleration - prev_position
+  #   return position
