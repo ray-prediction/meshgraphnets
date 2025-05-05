@@ -25,6 +25,7 @@ from meshgraphnets import cfd_eval
 from meshgraphnets import cfd_model
 from meshgraphnets import cloth_eval
 from meshgraphnets import cloth_model
+from meshgraphnets import ray_model
 from meshgraphnets import core_model
 from meshgraphnets import dataset
 
@@ -32,7 +33,7 @@ from meshgraphnets import dataset
 FLAGS = flags.FLAGS
 flags.DEFINE_enum('mode', 'train', ['train', 'eval'],
                   'Train model, or run evaluation.')
-flags.DEFINE_enum('model', None, ['cfd', 'cloth'],
+flags.DEFINE_enum('model', None, ['cfd', 'cloth', 'ray'],
                   'Select model to run.')
 flags.DEFINE_string('checkpoint_dir', None, 'Directory to save checkpoint')
 flags.DEFINE_string('dataset_dir', None, 'Directory to load dataset from.')
@@ -47,17 +48,24 @@ PARAMETERS = {
     'cfd': dict(noise=0.02, gamma=1.0, field='velocity', history=False,
                 size=2, batch=2, model=cfd_model, evaluator=cfd_eval),
     'cloth': dict(noise=0.003, gamma=0.1, field='world_pos', history=True,
-                  size=3, batch=1, model=cloth_model, evaluator=cloth_eval)
+                  size=3, batch=1, model=cloth_model, evaluator=cloth_eval),
+    'ray': dict(noise=0.003, gamma=0.1, field='world_pos', history=True, # TODO: this needs specific tuning
+                  size=3, batch=1, model=ray_model, evaluator=cloth_eval),  
 }
 
 
 def learner(model, params):
   """Run a learner job."""
-  ds = dataset.load_dataset(FLAGS.dataset_dir, 'train')
-  ds = dataset.add_targets(ds, [params['field']], add_history=params['history'])
-  ds = dataset.split_and_preprocess(ds, noise_field=params['field'],
-                                    noise_scale=params['noise'],
-                                    noise_gamma=params['gamma'])
+  if FLAGS.model == 'ray':
+    ds = dataset.load_ray_dataset(FLAGS.dataset_dir, 'train')
+  else:  
+    ds = dataset.load_dataset(FLAGS.dataset_dir, 'train')
+    ds = dataset.add_targets(ds, [params['field']], add_history=params['history'])
+
+  # TODO: I really should add noise to the tx/rx positions!!!
+  # ds = dataset.split_and_preprocess(ds, noise_field=params['field'],
+  #                                   noise_scale=params['noise'],
+  #                                   noise_gamma=params['gamma'])
   inputs = tf.data.make_one_shot_iterator(ds).get_next()
 
   loss_op = model.loss(inputs)
@@ -113,13 +121,16 @@ def evaluator(model, params):
 def main(argv):
   del argv
   tf.enable_resource_variables()
-  tf.disable_eager_execution()
+  # tf.disable_eager_execution()
+  tf.enable_eager_execution()
+
   params = PARAMETERS[FLAGS.model]
   learned_model = core_model.EncodeProcessDecode(
       output_size=params['size'],
       latent_size=128,
       num_layers=2,
       message_passing_steps=15)
+  print(params['model'])
   model = params['model'].Model(learned_model)
   if FLAGS.mode == 'train':
     learner(model, params)

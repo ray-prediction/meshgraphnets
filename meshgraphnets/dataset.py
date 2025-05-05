@@ -44,6 +44,61 @@ def _parse(proto, meta):
     out[key] = data
   return out
 
+feature_description = {
+    'scene_adj_flat': tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True),
+    'scene_adj_lengths': tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True),
+    'tx_adj_flat': tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True),
+    'tx_adj_lengths': tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True),
+    'rx_adj_flat': tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True),
+    'rx_adj_lengths': tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True),
+    'tx_loc': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+    'num_tx': tf.io.FixedLenFeature([1], tf.int64),
+    'rx_loc': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+    'num_rx': tf.io.FixedLenFeature([1], tf.int64),
+    'prim_vertices': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+    'prim_normals': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+    'num_prim': tf.io.FixedLenFeature([1], tf.int64),
+    'real_channel_coeff': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+    'imag_channel_coeff': tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+}
+
+def _parse_ray(example_proto):
+    parsed = tf.io.parse_single_example(example_proto, feature_description)
+
+    # Reshape based on metadata
+    tx_loc = tf.reshape(parsed['tx_loc'], [parsed['num_tx'][0], 3])
+    rx_loc = tf.reshape(parsed['rx_loc'], [parsed['num_rx'][0], 3])
+    prim_vertices = tf.reshape(parsed['prim_vertices'], [parsed['num_prim'][0], 3, 3])  # assuming triangles with 3 vertices
+    prim_normals = tf.reshape(parsed['prim_normals'], [parsed['num_prim'][0], 3])
+    real_channel_coeff = tf.reshape(parsed['real_channel_coeff'], [parsed['num_rx'][0], parsed['num_tx'][0], -1])
+    imag_channel_coeff = tf.reshape(parsed['imag_channel_coeff'], [parsed['num_rx'][0], parsed['num_tx'][0], -1])
+
+    scene_adj = tf.RaggedTensor.from_row_lengths(parsed['scene_adj_flat'], parsed['scene_adj_lengths'])
+    tx_adj = tf.RaggedTensor.from_row_lengths(parsed['tx_adj_flat'], parsed['tx_adj_lengths'])
+    rx_adj = tf.RaggedTensor.from_row_lengths(parsed['rx_adj_flat'], parsed['rx_adj_lengths'])
+
+    scene_adj = tf.cast(scene_adj, tf.int32)
+    tx_adj = tf.cast(tx_adj, tf.int32)
+    rx_adj = tf.cast(rx_adj, tf.int32)
+
+    return {
+        'scene_adj': scene_adj,
+        'tx_adj': tx_adj,
+        'rx_adj': rx_adj,
+        'tx_loc': tx_loc,
+        'rx_loc': rx_loc,
+        'prim_vertices': prim_vertices,
+        'prim_normals': prim_normals,
+        'real_channel_coeff': real_channel_coeff,
+        'imag_channel_coeff': imag_channel_coeff,
+    }
+
+
+def load_ray_dataset(path, split):
+  ds = tf.data.TFRecordDataset(os.path.join(path, split+'.tfrecord'))
+  ds = ds.map(functools.partial(_parse_ray), num_parallel_calls=8)
+  ds = ds.prefetch(1)
+  return ds
 
 def load_dataset(path, split):
   """Load dataset."""

@@ -29,6 +29,22 @@ class NodeType(enum.IntEnum):
   WALL_BOUNDARY = 6
   SIZE = 9
 
+class RayNodeType(enum.IntEnum):
+  PRIMITIVE = 0
+  TX = 1
+  RX = 2
+  SIZE = 3
+
+def adj_lists_to_edges(scene_adj, tx_adj, rx_adj):
+  tx_adj = tf.expand_dims(tx_adj, 0)
+  adj = tf.concat([scene_adj, tx_adj, rx_adj], axis=0)
+
+  print(adj[4])
+
+  receivers = adj.flat_values
+  print(receivers[0:100])  
+  pass
+
 
 def triangles_to_edges(faces):
   """Computes mesh edges from triangles."""
