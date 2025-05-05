@@ -57,13 +57,14 @@ class Model(snt.AbstractModule):
     prim_normals = tf.expand_dims(inputs['prim_normals'], axis=-1)
 
     # graph nodes should be 3d vertices - their average wit normal info included normal
+    max_feat = 12
     primitive_features = tf.concat([prim_vertices, prim_normals], -1)
-    primitive_features = tf.reshape(primitive_features, [-1, 12])
+    primitive_features = tf.reshape(primitive_features, [-1, max_feat])
     tx_features = tf.ones([1, 1])
     rx_features = tf.zeros([tf.shape(rx_pos)[0], 1])
 
-    tx_features = tf.pad(tx_features, [[0, 0], [0, 12 - 1]])
-    rx_features = tf.pad(rx_features, [[0, 0], [0, 12 - 1]])
+    tx_features = tf.pad(tx_features, [[0, 0], [0, max_feat - 1]])
+    rx_features = tf.pad(rx_features, [[0, 0], [0, max_feat - 1]])
 
     primitive_type = tf.fill([tf.shape(primitive_features)[0]], common.RayNodeType.PRIMITIVE)
     tx_type = tf.fill([1], common.RayNodeType.TX)
@@ -80,7 +81,7 @@ class Model(snt.AbstractModule):
 
     # shape (?, 15) with rows of prims, tx, then rx
     node_features = tf.concat([primitive_embed, tx_embed, rx_embed], axis=0)
-    print(node_features.shape)
+    # print(node_features.shape)
 
     graph_adj = inputs['scene_adj']
     tx_adj = inputs['tx_adj'][random] # only 1 tx for now
@@ -90,36 +91,30 @@ class Model(snt.AbstractModule):
     # print(tx_adj)
     # print(rx_adj)
 
-    out = common.adj_lists_to_edges(graph_adj, tx_adj, rx_adj)
+    senders, receivers = common.adj_lists_to_edges(graph_adj, tx_adj, rx_adj)
+    # print(senders)
+    # print(receivers)
 
+    tx_pos = tf.expand_dims(tx_pos, axis=0)
+    prim_pos = tf.reshape(prim_averages, [-1, 3])
+    # print(prim_pos.shape)
+    points = tf.concat([prim_pos, tx_pos, rx_pos], axis=0)
+    print(points.shape)
 
-  # def _build_graph(self, inputs, is_training):
-  #   """Builds input graph."""
-  #   # construct graph nodes
-  #   velocity = inputs['world_pos'] - inputs['prev|world_pos']
-  #   node_type = tf.one_hot(inputs['node_type'][:, 0], common.NodeType.SIZE)
-  #   node_features = tf.concat([velocity, node_type], axis=-1)
+    relative_pos = (tf.gather(points, senders) - tf.gather(points, receivers))
 
-  #   # construct graph edges
-  #   senders, receivers = common.triangles_to_edges(inputs['cells'])
-  #   relative_world_pos = (tf.gather(inputs['world_pos'], senders) -
-  #                         tf.gather(inputs['world_pos'], receivers))
-  #   relative_mesh_pos = (tf.gather(inputs['mesh_pos'], senders) -
-  #                        tf.gather(inputs['mesh_pos'], receivers))
-  #   edge_features = tf.concat([
-  #       relative_world_pos,
-  #       tf.norm(relative_world_pos, axis=-1, keepdims=True),
-  #       relative_mesh_pos,
-  #       tf.norm(relative_mesh_pos, axis=-1, keepdims=True)], axis=-1)
+    edge_features = tf.concat([relative_pos, tf.norm(relative_pos, axis=-1, keepdims=True)], axis=-1)
+    print(edge_features.shape)
 
-  #   mesh_edges = core_model.EdgeSet(
-  #       name='mesh_edges',
-  #       features=self._edge_normalizer(edge_features, is_training),
-  #       receivers=receivers,
-  #       senders=senders)
-  #   return core_model.MultiGraph(
-  #       node_features=self._node_normalizer(node_features, is_training),
-  #       edge_sets=[mesh_edges])
+    mesh_edges = core_model.EdgeSet(
+        name='mesh_edges',
+        features=self._edge_normalizer(edge_features, is_training),
+        receivers=receivers,
+        senders=senders)
+
+    return core_model.MultiGraph(
+        node_features=self._node_normalizer(node_features, is_training),
+        edge_sets=[mesh_edges])
 
   def _build(self, inputs):
     graph = self._build_graph(inputs, is_training=False)

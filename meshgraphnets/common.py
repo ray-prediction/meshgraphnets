@@ -39,11 +39,27 @@ def adj_lists_to_edges(scene_adj, tx_adj, rx_adj):
   tx_adj = tf.expand_dims(tx_adj, 0)
   adj = tf.concat([scene_adj, tx_adj, rx_adj], axis=0)
 
-  print(adj[4])
+  row_lengths = adj.row_lengths()         # shape [num_nodes]
+  start = tf.range(tf.shape(row_lengths)[0])   # sender = 0, 1, ..., N-1
+  start = tf.repeat(start, row_lengths) 
+  # print(start.shape)
+  # print(start[:100])
+  end = adj.flat_values
+  # print(end.shape)
 
-  receivers = adj.flat_values
-  print(receivers[0:100])  
-  pass
+  edges = tf.stack([start, end], axis=1)
+
+  # print(edges.shape)
+
+  receivers = tf.reduce_min(edges, axis=1)
+  senders = tf.reduce_max(edges, axis=1)
+  packed_edges = tf.bitcast(tf.stack([senders, receivers], axis=1), tf.int64)
+  # remove duplicates and unpack
+  unique_edges = tf.bitcast(tf.unique(packed_edges)[0], tf.int32)
+  senders, receivers = tf.unstack(unique_edges, axis=1)
+  # create two-way connectivity
+  return (tf.concat([senders, receivers], axis=0),
+          tf.concat([receivers, senders], axis=0))
 
 
 def triangles_to_edges(faces):
