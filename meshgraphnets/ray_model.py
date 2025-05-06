@@ -132,18 +132,24 @@ class Model(snt.AbstractModule):
     num_tx = 1
     num_rx = tf.shape(inputs['rx_loc'])[0]
     total = num_prim + num_tx + num_rx
-
+    
     loss_mask = tf.range(total)
     # print(num_prim)
     loss_mask = loss_mask >= (total - num_rx)
     # print(loss_mask[0:56])
 
-    # print(target_inco_sum_power.shape)
-    # print(network_output[loss_mask].shape)
-    error = tf.reduce_sum((target_inco_sum_power - network_output[loss_mask])**2, axis=1)
+    pred = network_output[loss_mask]
+    error = target_inco_sum_power - pred
+    
+    print('target:', target_inco_sum_power.shape)
+    print('pred:', pred.shape)
+    
+    mse = tf.reduce_mean(tf.square(error))
+    print("MSE before sqrt:", mse)
+    rmse = tf.sqrt(mse)
+    # Error is now rmse, mse results in tiny gradients with tiny outputs
     # print(error.shape)
-    loss = tf.reduce_mean(error)
-    return loss
+    return rmse
 
   def _update(self, inputs, per_node_network_output):
     """Integrate model outputs."""

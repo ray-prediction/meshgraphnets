@@ -24,13 +24,17 @@ def evaluate(model, inputs):
     imag_coeff = inputs['imag_channel_coeff'][:, model.random]
 
     target_inco_sum_power = tf.math.reduce_sum(real_coeff ** 2 + imag_coeff ** 2, axis=1)
-    print(network_output[mask])
-    print(target_inco_sum_power)
+    # print(network_output[mask])
+    # print(target_inco_sum_power)
     difference = target_inco_sum_power - network_output[mask]
-    print("MAPE: ", difference/target_inco_sum_power * 100)
-    error = tf.reduce_sum(difference**2, axis=1)
+    # print("MAPE: ", difference/target_inco_sum_power * 100)
+    error = tf.reduce_sum(difference, axis=1)
     loss = tf.reduce_mean(error)
-    return loss
+    return {
+        'real_coeff': real_coeff,
+        'pred_power': network_output[mask],
+        'target_power': target_inco_sum_power,
+        'loss': loss}
 
 
     

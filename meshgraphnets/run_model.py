@@ -60,6 +60,7 @@ def learner(model, params):
   """Run a learner job."""
   if FLAGS.model == 'ray':
     ds = dataset.load_ray_dataset(FLAGS.dataset_dir, 'train')
+    ds = ds.repeat()
   else:  
     ds = dataset.load_dataset(FLAGS.dataset_dir, 'train')
     ds = dataset.add_targets(ds, [params['field']], add_history=params['history'])
@@ -79,7 +80,7 @@ def learner(model, params):
   optimizer = tf.train.AdamOptimizer(learning_rate=lr)
   train_op = optimizer.minimize(loss_op, global_step=global_step)
   # Don't train for the first few steps, just accumulate normalization stats
-  train_op = tf.cond(tf.less(global_step, 100),
+  train_op = tf.cond(tf.less(global_step, 10),
                      lambda: tf.group(tf.assign_add(global_step, 1)),
                      lambda: tf.group(train_op))
 
@@ -114,16 +115,32 @@ def evaluator(model, params):
       save_checkpoint_steps=None) as sess:
     # trajectories = []
     scalars = []
-    # for traj_idx in range(FLAGS.num_rollouts):
-    #   logging.info('Rollout trajectory %d', traj_idx)
-    scalar_data = sess.run([scalar_op])
-    scalars.append(scalar_data)
-    for l in scalars:
-      print(l)    
+    for traj_idx in range(30): #FLAGS.num_rollouts):
+      logging.info('map %d', traj_idx)
+      scalar_data = sess.run([scalar_op])
+      scalars.append(scalar_data)
+   
     # for key in scalars[0]:
     #   logging.info('%s: %g', key, np.mean([x[key] for x in scalars]))
     # with open(FLAGS.rollout_path, 'wb') as fp:
     #   pickle.dump(trajectories, fp)
+    # logging.info(scalars)
+    select_out = []
+    
+    for s in scalars:
+      s = s[0]
+      mask = s['target_power'] > 0
+      print('num non zero powers: ', np.sum(mask))
+      t = np.reshape(s['target_power'][mask], -1)
+      p = np.reshape(s['pred_power'][mask], -1)
+      print(np.stack([t,p], axis=1))
+      
+      has_reading = np.average(s['pred_power'][mask])
+      total = np.average(s['pred_power'])
+      print("has reading avg - avg", has_reading, total, has_reading - total)
+      
+      # print(s['real_coeff'][mask])      
+      # print(tf.stack([s['target_power'][mask], s['pred_power'][mask]]))
 
 # @profile
 def main(argv):
@@ -137,7 +154,7 @@ def main(argv):
       output_size=params['size'],
       latent_size=128,
       num_layers=2,
-      message_passing_steps=15)
+      message_passing_steps=5)
   print(params['model'])
   model = params['model'].Model(learned_model)
   if FLAGS.mode == 'train':
